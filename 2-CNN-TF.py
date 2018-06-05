@@ -194,6 +194,5 @@ def training_all_folds(label_proportions, num_filter):
 
 test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.1, 0.25, 0.50, 0.75, 1.0],
                                                   num_filter=[32, 32, 64, 64, 128, 128])
-a = 1
 
 
