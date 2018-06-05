@@ -343,7 +343,6 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
                 # if alfa_val == 1:
                 # beta_val += 0.05
 
-
                 if all([change_to_ae, val_accuracy[k] < val_accuracy[k - 1], val_accuracy[k] < val_accuracy[k - 2]]):
                     # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k-1) + ".ckpt"
                     # checkpoint = os.path.join(os.getcwd(), save_path)
@@ -373,8 +372,6 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
                     alfa_val = 1.5
                     beta_val = 0.2
                     change_times += 1  ##
-
-                    third_step= 1   ##
                     change_to_ae = 1
                     key = 'change_' + str(k)
                     val_accuracy.update({key: val_accuracy[k]})
@@ -425,7 +422,5 @@ def training_all_folds(label_proportions, num_filter):
 
 test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(
     label_proportions=[0.1, 0.25, 0.5, 0.75, 1.0], num_filter=[32, 32, 64, 64, 128, 128])
-
-a = 1
 
 
