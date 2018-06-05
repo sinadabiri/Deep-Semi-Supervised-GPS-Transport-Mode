@@ -14,7 +14,7 @@ max_threshold = 248
 min_distance = 150
 min_time = 60
 
-'''
+
 filename = '../Mode-codes-Revised/paper2_Trajectory_Label.pickle'
 with open(filename, 'rb') as f:
     trajectory_all_user_with_label, trajectory_all_user_wo_label = pickle.load(f)
@@ -224,7 +224,6 @@ trip_motion_all_user_wo_label = [compute_trip_motion_features(user, data_type='u
 # This pickling and unpickling is due to large computation time before this line.
 with open('paper2_trips_motion_features_temp.pickle', 'wb') as f:
     pickle.dump([trip_motion_all_user_with_label, trip_motion_all_user_wo_label], f)
-'''
 
 filename = '../Mode-codes-Revised/paper2_trips_motion_features_temp.pickle'
 with open(filename, 'rb') as f:
