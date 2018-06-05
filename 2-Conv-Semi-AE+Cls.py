@@ -9,11 +9,17 @@ from sklearn.model_selection import GridSearchCV
 import pandas as pd
 import os
 from sklearn.decomposition import PCA
-# Settings
-prop = 0.5  # the proportion of labeled data
+from sklearn.metrics import precision_score
+from sklearn.metrics import recall_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import roc_auc_score
+import keras
+
+
+
+# Training Settings
 batch_size = 100
 latent_dim = 800
-epochs_ae_cls = 20
 change = 10
 units = 800  # num unit in the MLP hidden layer
 num_filter_ae_cls = [32, 32, 64, 64, 128, 128]  # conv_layers and No. of its channels for AE + CLS
@@ -24,29 +30,16 @@ activation = tf.nn.relu
 padding = 'same'
 strides = 1
 pool_size = (1, 2)
-
 num_class = 5
 reg_l2 = tf.contrib.layers.l1_regularizer(scale=0.1)
 initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
 #initializer = tf.truncated_normal_initializer()
 
 # Import the data
-filename = '../Mode-codes-Revised/paper2_data_for_DL_train_val_test.pickle'
+#filename = '../Mode-codes-Revised/paper2_data_for_DL_train_val_test.pickle'
+filename = '../Mode-codes-Revised/paper2_data_for_DL_kfold_dataset_RL.pickle'
 with open(filename, 'rb') as f:
-    Train_X, Train_Y, Val_X, Val_Y, Val_Y_ori, Test_X, Test_Y, Test_Y_ori, X_unlabeled = pickle.load(f)
-# Training and test set for GPS segments
-random.seed(7)
-np.random.seed(7)
-tf.set_random_seed(7)
-Train_X_Comb = X_unlabeled
-index = np.arange(len(Train_X))
-np.random.shuffle(index)
-Train_X = Train_X[index[:round(prop*len(Train_X))]]
-Train_Y = Train_Y[index[:round(prop*len(Train_Y))]]
-#Train_X_Comb = np.vstack((Train_X, Train_X_Unlabel))
-random.shuffle(Train_X_Comb)
-
-input_size = list(np.shape(Test_X)[1:])
+    kfold_dataset, X_unlabeled = pickle.load(f)
 
 
 # Encoder Network
@@ -160,7 +153,7 @@ def classifier_mlp(latent_labeled, num_class, num_filter_cls, num_dense):
     return classifier_output, dense_last
 
 
-def semi_supervised(input_labeled, input_combined, true_label, alpha, beta, num_class, latent_dim, num_filter_ae_cls, num_filter_cls, num_dense):
+def semi_supervised(input_labeled, input_combined, true_label, alpha, beta, num_class, latent_dim, num_filter_ae_cls, num_filter_cls, num_dense, input_size):
 
     latent_combined, latent_labeled, layers_shape = encoder_network(latent_dim=latent_dim, num_filter_ae_cls=num_filter_ae_cls,
                                                                     input_combined=input_combined, input_labeled=input_labeled)
@@ -205,7 +198,7 @@ def ensemble_train_set(Train_X, Train_Y):
     return Train_X[index], Train_Y[index]
 
 
-def loss_acc_evaluation(Test_X, Test_Y):
+def loss_acc_evaluation(Test_X, Test_Y, loss_cls, accuracy_cls, input_labeled, true_label, k, sess):
     metrics = []
     for i in range(len(Test_X) // batch_size):
         Test_X_batch = Test_X[i * batch_size:(i + 1) * batch_size]
@@ -222,11 +215,11 @@ def loss_acc_evaluation(Test_X, Test_Y):
                                                    true_label: Test_Y_batch})
         metrics.append([loss_cls_, accuracy_cls_])
     mean_ = np.mean(np.array(metrics), axis=0)
-    print('Epoch Num {}, Loss_cls_Val {}, Accuracy_Val {}'.format(k, mean_[0], mean_[1]))
+    #print('Epoch Num {}, Loss_cls_Val {}, Accuracy_Val {}'.format(k, mean_[0], mean_[1]))
     return mean_[0], mean_[1]
 
 
-def prediction_prob(Test_X):
+def prediction_prob(Test_X, classifier_output, input_labeled, sess):
     prediction = []
     for i in range(len(Test_X) // batch_size):
         Test_X_batch = Test_X[i * batch_size:(i + 1) * batch_size]
@@ -236,53 +229,98 @@ def prediction_prob(Test_X):
     prediction = np.vstack(tuple(prediction))
     return prediction
 
-num_filter_ae_cls_all = [[32, 32], [32, 32, 64], [32, 32, 64, 64], [32, 32, 64, 64, 128],
+
+def train_val_split(Train_X, Train_Y_ori):
+    val_index = []
+    for i in range(num_class):
+        label_index = np.where(Train_Y_ori == i)[0]
+        val_index.append(label_index[:round(0.1*len(label_index))])
+    val_index = np.hstack(tuple([label for label in val_index]))
+    Val_X = Train_X[val_index]
+    Val_Y_ori = Train_Y_ori[val_index]
+    Val_Y = keras.utils.to_categorical(Val_Y_ori, num_classes=num_class)
+    train_index_ = np.delete(np.arange(0, len(Train_Y_ori)), val_index)
+    Train_X = Train_X[train_index_]
+    Train_Y_ori = Train_Y_ori[train_index_]
+    Train_Y = keras.utils.to_categorical(Train_Y_ori, num_classes=num_class)
+    return Train_X, Train_Y, Train_Y_ori, Val_X, Val_Y, Val_Y_ori
+
+
+def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae_cls=20):
+    Train_X = one_fold[0]
+    Train_Y_ori = one_fold[1]
+    random.seed(seed)
+    np.random.seed(seed)
+    random_sample = np.random.choice(len(Train_X), size=round(prop*len(Train_X)), replace=False, p=None)
+    Train_X = Train_X[random_sample]
+    Train_Y_ori = Train_Y_ori[random_sample]
+    Train_X, Train_Y, Train_Y_ori, Val_X, Val_Y, Val_Y_ori = train_val_split(Train_X, Train_Y_ori)
+    Test_X = one_fold[2]
+    Test_Y = one_fold[3]
+    Test_Y_ori = one_fold[4]
+    Train_X_Comb = X_unlabeled
+
+    input_size = list(np.shape(Test_X)[1:])
+    # Various sets of number of filters for ensemble. If choose one set, no ensemble is implemented.
+    num_filter_ae_cls_all = [[32, 32], [32, 32, 64], [32, 32, 64, 64], [32, 32, 64, 64, 128],
                              [32, 32, 64, 64, 128, 128], [32, 32, 64, 64, 128, 128], [32, 32, 64, 64, 128, 128]]
-num_filter_ae_cls_all = [[32, 32, 64, 64, 128, 128]]
-class_posterior = []
-orig_Train_X = Train_X.copy()
-orig_Train_Y = Train_Y.copy()
-for z in range(len(num_filter_ae_cls_all)):
-    # Change the following see to None only for Ensemble.
-    #random.seed(7)
-    #np.random.seed(7)
-    #tf.set_random_seed(7)
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        input_labeled = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_labeled')
-        input_combined = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_combined')
-        true_label = tf.placeholder(tf.float32, shape=[None, num_class], name='true_label')
-        alpha = tf.placeholder(tf.float32, shape=(), name='alpha')
-        beta = tf.placeholder(tf.float32, shape=(), name='beta')
+    num_filter_ae_cls_all = [[32, 32, 64, 64, 128, 128]]
+    class_posterior = []
 
-        num_filter_ae_cls = num_filter_ae_cls_all[z]
-        loss_ae, loss_cls, accuracy_cls, train_op_ae, train_op_cls, classifier_output, dense, train_op, total_loss = semi_supervised(
-            input_labeled=input_labeled, input_combined=input_combined, true_label=true_label, alpha=alpha, beta=beta,
-            num_class=num_class, latent_dim=latent_dim, num_filter_ae_cls=num_filter_ae_cls,
-            num_filter_cls=num_filter_cls, num_dense=num_dense)
-        sess.run(tf.global_variables_initializer())
-        saver = tf.train.Saver(max_to_keep=10)
-        # Train_X, Train_Y = ensemble_train_set(orig_Train_X, orig_Train_Y)
-        val_accuracy = {-2: 0, -1: 0}
-        val_loss = {-2: 10, -1: 10}
-        num_batches = len(Train_X_Comb) // batch_size
-        #alfa_val1 = [0.0, 0.0, 1.0, 1.0, 1.0]
-        #beta_val1 = [1.0, 1.0, 0.1, 0.1, 0.1]
-        alfa_val = 0
-        beta_val = 1
-        change_to_ae = 1  # the value defines that algorithm is ready to change to joint ae-cls
-        change_times = 0  # No. of times change from cls to ae-cls
+    # This for loop is only for implementing ensemble
+    for z in range(len(num_filter_ae_cls_all)):
+        # Change the following seed to None only for Ensemble.
+        tf.reset_default_graph()  # Used for ensemble
+        with tf.Session() as sess:
+            input_labeled = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_labeled')
+            input_combined = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_combined')
+            true_label = tf.placeholder(tf.float32, shape=[None, num_class], name='true_label')
+            alpha = tf.placeholder(tf.float32, shape=(), name='alpha')
+            beta = tf.placeholder(tf.float32, shape=(), name='beta')
 
-        for k in range(epochs_ae_cls):
-            # alfa_val = alfa_val1[k]
-            # beta_val = beta_val1[k]
+            num_filter_ae_cls = num_filter_ae_cls_all[z]
+            loss_ae, loss_cls, accuracy_cls, train_op_ae, train_op_cls, classifier_output, dense, train_op, total_loss = semi_supervised(
+                input_labeled=input_labeled, input_combined=input_combined, true_label=true_label, alpha=alpha,
+                beta=beta, num_class=num_class, latent_dim=latent_dim, num_filter_ae_cls=num_filter_ae_cls,
+                num_filter_cls=num_filter_cls, num_dense=num_dense, input_size=input_size)
+            sess.run(tf.global_variables_initializer())
+            saver = tf.train.Saver(max_to_keep=20)
+            # Train_X, Train_Y = ensemble_train_set(orig_Train_X, orig_Train_Y)
+            val_accuracy = {-2: 0, -1: 0}
+            val_loss = {-2: 10, -1: 10}
+            num_batches = len(Train_X_Comb) // batch_size
+            # alfa_val1 = [0.0, 0.0, 1.0, 1.0, 1.0]
+            # beta_val1 = [1.0, 1.0, 0.1, 0.1, 0.1]
+            alfa_val = 0  ## 0
+            beta_val = 1
+            change_to_ae = 1  # the value defines that algorithm is ready to change to joint ae-cls
+            change_times = 0  # No. of times change from cls to ae-cls, which is 2 for this training strategy
+            third_step = 0
+            for k in range(epochs_ae_cls):
+                # alfa_val = alfa_val1[k]
+                # beta_val = beta_val1[k]
 
-            x_combined_index = get_combined_index(train_x_comb=Train_X_Comb)
-            x_labeled_index = get_labeled_index(train_x_comb=Train_X_Comb, train_x=Train_X)
-            # x_labeled_index = np.arange(len(Train_X))
-            for i in range(num_batches):
-                unlab_index_range = x_combined_index[i * batch_size: (i + 1) * batch_size]
-                lab_index_range = x_labeled_index[i * batch_size: (i + 1) * batch_size]
+                #beta_val = min(((1 - 0.1) / (-epochs_ae_cls)) * k + 1, 0.1) ##
+                #alfa_val = max(((1.5 - 1) / (epochs_ae_cls)) * k + 1, 1.5)
+
+                x_combined_index = get_combined_index(train_x_comb=Train_X_Comb)
+                x_labeled_index = get_labeled_index(train_x_comb=Train_X_Comb, train_x=Train_X)
+                for i in range(num_batches):
+                    unlab_index_range = x_combined_index[i * batch_size: (i + 1) * batch_size]
+                    lab_index_range = x_labeled_index[i * batch_size: (i + 1) * batch_size]
+                    X_ae = Train_X_Comb[unlab_index_range]
+                    X_cls = Train_X[lab_index_range]
+                    Y_cls = Train_Y[lab_index_range]
+                    loss_ae_, loss_cls_, accuracy_cls_, _ = sess.run([loss_ae, loss_cls, accuracy_cls, train_op],
+                                                                     feed_dict={alpha: alfa_val, beta: beta_val,
+                                                                                input_combined: X_ae,
+                                                                                input_labeled: X_cls,
+                                                                                true_label: Y_cls})
+                    #print('Epoch Num {}, Batches Num {}, Loss_AE {}, Loss_cls {}, Accuracy_train {}'.format
+                          #(k, i, np.round(loss_ae_, 3), np.round(loss_cls_, 3), np.round(accuracy_cls_, 3)))
+
+                unlab_index_range = x_combined_index[(i + 1) * batch_size:]
+                lab_index_range = x_labeled_index[(i + 1) * batch_size:]
                 X_ae = Train_X_Comb[unlab_index_range]
                 X_cls = Train_X[lab_index_range]
                 Y_cls = Train_Y[lab_index_range]
@@ -293,220 +331,101 @@ for z in range(len(num_filter_ae_cls_all)):
                 print('Epoch Num {}, Batches Num {}, Loss_AE {}, Loss_cls {}, Accuracy_train {}'.format
                       (k, i, np.round(loss_ae_, 3), np.round(loss_cls_, 3), np.round(accuracy_cls_, 3)))
 
-            unlab_index_range = x_combined_index[(i + 1) * batch_size:]
-            lab_index_range = x_labeled_index[(i + 1) * batch_size:]
-            X_ae = Train_X_Comb[unlab_index_range]
-            X_cls = Train_X[lab_index_range]
-            Y_cls = Train_Y[lab_index_range]
-            loss_ae_, loss_cls_, accuracy_cls_, _ = sess.run([loss_ae, loss_cls, accuracy_cls, train_op],
-                                                             feed_dict={alpha: alfa_val, beta: beta_val,
-                                                                        input_combined: X_ae,
-                                                                        input_labeled: X_cls, true_label: Y_cls})
-            print('Epoch Num {}, Batches Num {}, Loss_AE {}, Loss_cls {}, Accuracy_train {}'.format
-                  (k, i, np.round(loss_ae_, 3), np.round(loss_cls_, 3), np.round(accuracy_cls_, 3)))
-
-            print('====================================================')
-            loss_val, acc_val = loss_acc_evaluation(Val_X, Val_Y)
-            val_loss.update({k: loss_val})
-            val_accuracy.update({k: acc_val})
-            print('====================================================')
-            saver.save(sess, "/Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop), global_step=k)
-            # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k) + ".ckpt"
-            # checkpoint = os.path.join(os.getcwd(), save_path)
-            # saver.save(sess, checkpoint)
-            # if alfa_val == 1:
-            # beta_val += 0.05
-
-            if all([change_to_ae, val_accuracy[k] < val_accuracy[k - 1], val_accuracy[k] < val_accuracy[k - 2]]):
-                # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k-1) + ".ckpt"
+                print('====================================================')
+                loss_val, acc_val = loss_acc_evaluation(Val_X, Val_Y, loss_cls, accuracy_cls, input_labeled, true_label, k, sess)
+                val_loss.update({k: loss_val})
+                val_accuracy.update({k: acc_val})
+                print('====================================================')
+                saver.save(sess, "/Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop), global_step=k)
+                # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k) + ".ckpt"
                 # checkpoint = os.path.join(os.getcwd(), save_path)
-                max_acc = max(val_accuracy.items(), key=lambda k: k[1])[0]
-                save_path = "/Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop) + '-' + str(max_acc)
-                saver.restore(sess, save_path)
-                alfa_val = 1
-                beta_val += 0.1
-                num_epoch_cls_only = k
-                change_times += 1
-                change_to_ae = 0
-                key = 'change_' + str(k)
-                val_accuracy.update({key: val_accuracy[k]})
-                val_loss.update({key: val_loss[k]})
-                val_accuracy.update({k: val_accuracy[max_acc] - 0.001})
-                val_loss.update({k: val_loss[max_acc] + 0.001})
+                # saver.save(sess, checkpoint)
+                # if alfa_val == 1:
+                # beta_val += 0.05
 
-            elif all([not change_to_ae, val_accuracy[k] < val_accuracy[k - 1],
-                      val_accuracy[k] < val_accuracy[k - 2]]):
-                # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k - 1) + ".ckpt"
-                # #checkpoint = os.path.join(os.getcwd(), save_path)
-                max_acc = max(val_accuracy.items(), key=lambda k: k[1])[0]
-                #saver.restore(sess, "/Conv-Semi-TF-PS/" + str(prop) + '/' + str(max_acc) + ".ckpt")
-                save_path = "/Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop) + '-' + str(max_acc)
-                saver.restore(sess, save_path)
-                num_epoch_ae_cls = k - num_epoch_cls_only - 1
-                alfa_val = 1
-                beta_val = 0.2
-                change_to_ae = 1
-                key = 'change_' + str(k)
-                val_accuracy.update({key: val_accuracy[k]})
-                val_loss.update({key: val_loss[k]})
-                val_accuracy.update({k: val_accuracy[max_acc] - 0.001})
-                val_loss.update({k: val_loss[max_acc] + 0.001})
-            if change_times == 2:
-                break
 
-        print("Ensembel {}: Val_Accu ae+cls Over Epochs {}: ".format(z, val_accuracy))
-        print("Ensembel {}: Val_loss ae+cls Over Epochs {}: ".format(z, val_loss))
-        # print("num_epoch_cls_only: ", num_epoch_cls_only)
-        # print("num_epoch_ae_cls: ", num_epoch_ae_cls)
-        class_posterior.append(prediction_prob(Test_X))
+                if all([change_to_ae, val_accuracy[k] < val_accuracy[k - 1], val_accuracy[k] < val_accuracy[k - 2]]):
+                    # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k-1) + ".ckpt"
+                    # checkpoint = os.path.join(os.getcwd(), save_path)
+                    max_acc = max(val_accuracy.items(), key=lambda k: k[1])[0]
+                    save_path = "/Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop) + '-' + str(max_acc)
+                    saver.restore(sess, save_path)
+                    alfa_val = 1.0
+                    beta_val = 0.1
+                    num_epoch_cls_only = k
+                    change_times += 1
+                    change_to_ae = 1
+                    key = 'change_' + str(k)
+                    val_accuracy.update({key: val_accuracy[k]})
+                    val_loss.update({key: val_loss[k]})
+                    #val_accuracy.update({k: val_accuracy[max_acc] - 0.001}) ##
+                    #val_loss.update({k: val_loss[max_acc] + 0.001})  ##
 
-ave_class_posterior = sum(class_posterior)/len(class_posterior)
-y_pred = np.argmax(ave_class_posterior, axis=1)
-print('Test Accuracy of the Ensemble: ', accuracy_score(Test_Y_ori, y_pred))
+                elif all([not change_to_ae, val_accuracy[k] < val_accuracy[k - 1],
+                          val_accuracy[k] < val_accuracy[k - 2]]):
+                    # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k - 1) + ".ckpt"
+                    # #checkpoint = os.path.join(os.getcwd(), save_path)
+                    max_acc = max(val_accuracy.items(), key=lambda k: k[1])[0]
+                    # saver.restore(sess, "/Conv-Semi-TF-PS/" + str(prop) + '/' + str(max_acc) + ".ckpt")
+                    save_path = "/Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop) + '-' + str(max_acc)
+                    saver.restore(sess, save_path)
+                    num_epoch_ae_cls = k - num_epoch_cls_only - 1
+                    alfa_val = 1.5
+                    beta_val = 0.2
+                    change_times += 1  ##
+
+                    third_step= 1   ##
+                    change_to_ae = 1
+                    key = 'change_' + str(k)
+                    val_accuracy.update({key: val_accuracy[k]})
+                    val_loss.update({key: val_loss[k]})
+                    #val_accuracy.update({k: val_accuracy[max_acc] - 0.001})  ##
+                    #val_loss.update({k: val_loss[max_acc] + 0.001})  ##
+                if change_times == 2: ##
+                    break
+
+            print("Ensemble {}: Val_Accu ae+cls Over Epochs {}: ".format(z, val_accuracy))
+            print("Ensemble {}: Val_loss ae+cls Over Epochs {}: ".format(z, val_loss))
+            class_posterior.append(prediction_prob(Test_X, classifier_output, input_labeled, sess))
+
+        ave_class_posterior = sum(class_posterior) / len(class_posterior)
+        y_pred = np.argmax(ave_class_posterior, axis=1)
+        test_accuracy = accuracy_score(Test_Y_ori, y_pred)
+        #precision = precision_score(Test_Y_ori, y_pred, average='weighted')
+        #recall = recall_score(Test_Y_ori, y_pred, average='weighted')
+        f1_macro = f1_score(Test_Y_ori, y_pred, average='macro')
+        f1_weight = f1_score(Test_Y_ori, y_pred, average='weighted')
+        print('Semi-AE+Cls Test Accuracy of the Ensemble: ', test_accuracy)
+    return test_accuracy, f1_macro, f1_weight
+
+def training_all_folds(label_proportions, num_filter):
+    test_accuracy_fold = [[] for _ in range(len(label_proportions))]
+    mean_std_acc = [[] for _ in range(len(label_proportions))]
+    test_metrics_fold = [[] for _ in range(len(label_proportions))]
+    mean_std_metrics = [[] for _ in range(len(label_proportions))]
+    for index, prop in enumerate(label_proportions):
+        for i in range(len(kfold_dataset)):
+            test_accuracy, f1_macro, f1_weight = training(kfold_dataset[i], X_unlabeled=X_unlabeled, seed=7, prop=prop, num_filter_ae_cls_all=num_filter)
+            test_accuracy_fold[index].append(test_accuracy)
+            test_metrics_fold[index].append([f1_macro, f1_weight])
+        accuracy_all = np.array(test_accuracy_fold[index])
+        mean = np.mean(accuracy_all)
+        std = np.std(accuracy_all)
+        mean_std_acc[index] = [mean, std]
+        metrics_all = np.array(test_metrics_fold[index])
+        mean_metrics = np.mean(metrics_all, axis=0)
+        std_metrics = np.std(metrics_all, axis=0)
+        mean_std_metrics[index] = [mean_metrics, std_metrics]
+    for index, prop in enumerate(label_proportions):
+        print('All Test Accuracy For Semi-AE+Cls with Prop {} are: {}'.format(prop, test_accuracy_fold[index]))
+        print('Semi-AE+Cls test accuracy for prop {}: Mean {}, std {}'.format(prop, mean_std_acc[index][0], mean_std_acc[index][1]))
+        print('Semi-AE+Cls test metrics for prop {}: Mean {}, std {}'.format(prop, mean_std_metrics[index][0], mean_std_metrics[index][1]))
+        print('\n')
+    return test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics
+
+test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(
+    label_proportions=[0.1, 0.25, 0.5, 0.75, 1.0], num_filter=[32, 32, 64, 64, 128, 128])
+
 a = 1
-
-with tf.Session() as sess:
-
-    # Pseudo label implementation mine
-    ''''
-    soft_max = tf.nn.softmax(classifier_output)
-    pred_prob = []
-    for i in range(len(Test_X) // batch_size):
-        Test_X_batch = Test_X[i * batch_size:(i + 1) * batch_size]
-        pred_prob.append(sess.run(soft_max, feed_dict={input_labeled: Test_X_batch}))
-    Test_X_batch = Test_X[(i + 1) * batch_size:]
-    pred_prob.append(sess.run(soft_max, feed_dict={input_labeled: Test_X_batch}))
-    pred_prob = np.concatenate(pred_prob)
-    y_pred = np.argmax(pred_prob, axis=1)
-    index = np.where(y_pred == Test_Y_ori)[0]
-    Accuracy_Test = len(index) * 1. / len(Test_Y_ori)
-    pred_prob = pred_prob[index]
-    y_pred = y_pred[index]
-    percen_threshold = 0.8
-    class_prob = [[], [], [], [], [], []]
-    class_percentile = []
-    for i in range(num_class):
-        one_mode_pred_prob = np.max(pred_prob[np.where(y_pred == i)[0]], axis=1)
-        class_prob[i] = one_mode_pred_prob
-        class_percentile.append(np.percentile(one_mode_pred_prob, 80))
-        print('Descriptive statistics for pred probability of class ', i,
-              pd.Series(one_mode_pred_prob).describe(percentiles=list(np.linspace(0.05, 1, 11))))
-
-    pred_prob_ul = []
-    for i in range(len(Train_X_Comb) // batch_size):
-        X_batch = Train_X_Comb[i * batch_size:(i + 1) * batch_size]
-        pred_prob_ul.append(sess.run(soft_max, feed_dict={input_labeled: X_batch}))
-    X_batch = Train_X_Comb[(i + 1) * batch_size:]
-    pred_prob_ul.append(sess.run(soft_max, feed_dict={input_labeled: X_batch}))
-    pred_prob_ul = np.concatenate(pred_prob_ul)
-    Train_X_Unlabel = []
-    Train_Y_Unlabel = []
-    arg_max = np.argmax(pred_prob_ul, axis=1)
-    for i, item in enumerate(arg_max):
-        if np.max(pred_prob_ul[i]) >= class_percentile[item]:
-            Train_X_Unlabel.append(Train_X_Comb[i])
-            Train_Y_Unlabel.append(item)
-    Train_X_Unlabel = np.array(Train_X_Unlabel)
-    '''
-    # Re-train the model
-    '''
-    sess.run(tf.global_variables_initializer())
-    Train_X_Unlabel = np.vstack((Train_X_Unlabel, Train_X))
-    Train_Y_Unlabel = sess.run(tf.one_hot(Train_Y_Unlabel, num_class))
-    Train_Y_Unlabel = np.vstack((Train_Y_Unlabel, Train_Y))
-    test_accuracy_pseudo = {}
-    test_loss_pseudo = {}
-    epochs = 30
-    for k in range(epochs):
-        for i in range(len(Train_X_Unlabel) // batch_size):
-            X_cls = Train_X_Unlabel[i * batch_size: (i + 1) * batch_size]
-            Y_cls = Train_Y_Unlabel[i * batch_size: (i + 1) * batch_size]
-            loss_cls_, accuracy_cls_, _ = sess.run([loss_cls, accuracy_cls, train_op_cls],
-                                                   feed_dict={input_labeled: X_cls, true_label: Y_cls})
-            print('Epoch Num {}, Batches Num {}, Loss_cls {}, Accuracy_train {}'.format
-                  (k, i, np.round(loss_cls_, 3), np.round(accuracy_cls_, 3)))
-
-        X_cls = Train_X_Unlabel[(i + 1) * batch_size:]
-        Y_cls = Train_Y_Unlabel[(i + 1) * batch_size:]
-        loss_cls_, accuracy_cls_, _ = sess.run([loss_cls, accuracy_cls, train_op_cls],
-                                               feed_dict={input_labeled: X_cls, true_label: Y_cls})
-        print('Epoch Num {}, Batches Num {}, Loss_cls {}, Accuracy_train {}'.format
-              (k, i, np.round(loss_cls_, 3), np.round(accuracy_cls_, 3)))
-        print('==================================================================')
-        metrics = []
-        for i in range(len(Test_X) // batch_size):
-            Test_X_batch = Test_X[i * batch_size:(i + 1) * batch_size]
-            Test_Y_batch = Test_Y[i * batch_size:(i + 1) * batch_size]
-            loss_cls_, accuracy_cls_ = sess.run([loss_cls, accuracy_cls],
-                                            feed_dict={input_labeled: Test_X_batch, true_label: Test_Y_batch})
-            metrics.append([loss_cls_, accuracy_cls_])
-        Test_X_batch = Test_X[(i + 1) * batch_size:]
-        Test_Y_batch = Test_Y[(i + 1) * batch_size:]
-        loss_cls_, accuracy_cls_ = sess.run([loss_cls, accuracy_cls],
-                                        feed_dict={input_labeled: Test_X_batch, true_label: Test_Y_batch})
-        metrics.append([loss_cls_, accuracy_cls_])
-        mean_ = np.mean(np.array(metrics), axis=0)
-        print('Epoch Num {}, Loss_cls {}, Accuracy_test {}'.format(k, mean_[0], mean_[1]))
-        print('==================================================================')
-        test_loss_pseudo.update({k: mean_[0]})
-        test_accuracy_pseudo.update({k: mean_[1]})
-
-    print("Test Accuracy Over Epochs: ", test_accuracy_pseudo)
-    print("Loss Classifier Over Epochs: ", test_loss_pseudo)
-    '''
-
-
-    # Implement classical ML
-    '''
-    x_labeled_index = np.arange(len(Train_X))
-    X_latent = np.zeros((len(Train_X), dense.get_shape().as_list()[1]), dtype=np.float32)
-
-    for i in range(len(Train_X) // batch_size):
-        lab_index_range = x_labeled_index[i * batch_size: (i + 1) * batch_size]
-        X_cls = Train_X[lab_index_range]
-        Y_cls = Train_Y[lab_index_range]
-        X_latent[i * batch_size: (i + 1) * batch_size] = sess.run(dense, feed_dict={input_labeled: X_cls})
-    lab_index_range = x_labeled_index[(i + 1) * batch_size:]
-    X_cls = Train_X[lab_index_range]
-    X_latent[(i + 1) * batch_size:] = sess.run(dense, feed_dict={input_labeled: X_cls})
-    Y_latent = sess.run(tf.argmax(true_label, axis=1), feed_dict={true_label: Train_Y})
-    Test_X_latent = sess.run(dense, feed_dict={input_labeled: Test_X})
-    # Apply PCA
-    #pca = PCA(n_components=13)
-    #X_latent = pca.fit_transform(X_latent)
-    #Test_X_latent = pca.fit_transform(Test_X_latent)
-
-    RandomForest = RandomForestClassifier()
-    # parameters = {'C': [0.5, 1, 4, 7, 10, 13, 16, 20]}
-    parameters = {'max_depth': [(i+1)*10 for i in range(10)]}
-    clf = GridSearchCV(estimator=RandomForest, param_grid=parameters, cv=5)
-    fit = clf.fit(X_latent, Y_latent)
-    print('optimal parameter value: ', fit.best_params_)
-    Prediction_RT = fit.best_estimator_.predict(Test_X_latent)
-    #Accuracy_RandomForest = len(np.where(Prediction_RT == y_test)[0]) * 1. / len(y_test)
-    #print('Accuracy: ', Accuracy_RandomForest)
-    print('Test Accuracy Random Forest%: ', accuracy_score(Test_Y_ori, Prediction_RT))
-    #print(classification_report(y_test, Prediction_RT, digits=3))
-
-    # SVM
-    RandomForest = SVC()
-    parameters = {'C': [0.5, 1, 4, 7, 10, 13, 16, 20]}
-    clf = GridSearchCV(estimator=RandomForest, param_grid=parameters, cv=5)
-    fit = clf.fit(X_latent, Y_latent)
-    print('optimal parameter value: ', fit.best_params_)
-    Prediction_RT = fit.best_estimator_.predict(Test_X_latent)
-    # Accuracy_RandomForest = len(np.where(Prediction_RT == y_test)[0]) * 1. / len(y_test)
-    # print('Accuracy: ', Accuracy_RandomForest)
-    print('Test Accuracy SVC %: ', accuracy_score(Test_Y_ori, Prediction_RT))
-    # print(classification_report(y_test, Prediction_RT, digits=3))
-    #===================
-
-    y_pred = sess.run(tf.argmax(input=classifier_output, axis=1), feed_dict={input_labeled: Test_X})
-    print('Test Accuracy %: ', accuracy_score(Test_Y_ori, y_pred))
-    print('\n')
-    print('Confusin matrix: ', confusion_matrix(Test_Y_ori, y_pred))
-    print('\n')
-    print(classification_report(Test_Y_ori, y_pred, digits=3))
-    '''
 
 

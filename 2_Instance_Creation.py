@@ -7,13 +7,14 @@ import random
 import pandas as pd
 
 # Change the current working directory to the location of 'Combined Trajectory_Label_Geolife' folder.
+
 current = time.clock()
 min_threshold = 20
 max_threshold = 248
 min_distance = 150
 min_time = 60
 
-
+'''
 filename = '../Mode-codes-Revised/paper2_Trajectory_Label.pickle'
 with open(filename, 'rb') as f:
     trajectory_all_user_with_label, trajectory_all_user_wo_label = pickle.load(f)
@@ -223,7 +224,7 @@ trip_motion_all_user_wo_label = [compute_trip_motion_features(user, data_type='u
 # This pickling and unpickling is due to large computation time before this line.
 with open('paper2_trips_motion_features_temp.pickle', 'wb') as f:
     pickle.dump([trip_motion_all_user_with_label, trip_motion_all_user_wo_label], f)
-
+'''
 
 filename = '../Mode-codes-Revised/paper2_trips_motion_features_temp.pickle'
 with open(filename, 'rb') as f:
@@ -242,12 +243,14 @@ def trip_check_thresholds(trip_motion_all_user, min_threshold, min_distance, min
             all_user.append(list(filter(lambda trip: len(trip[0]) >= min_threshold and np.sum(trip[0, :]) >= min_distance
                                           and np.sum(trip[1, :]) >= min_time, user)))
     return all_user
-# Split the trips for each user into train, test, and validation sets.
+
+# Apply the threshold values to each GPS segment
 trip_motion_all_user_with_label = trip_check_thresholds(trip_motion_all_user_with_label, min_threshold=min_threshold, min_distance=min_distance, min_time=min_time,
                                                         data_type='labeled')
 trip_motion_all_user_wo_label = trip_check_thresholds(trip_motion_all_user_wo_label, min_threshold=min_threshold, min_distance=min_distance, min_time=min_time,
                                                         data_type='unlabeled')
 
+# Find the median size (M) as the fixed size of all GPS segments.
 trip_length_labeled = [len(trip[0][0]) for user in trip_motion_all_user_with_label for trip in user]
 trip_length_unlabeled = [len(trip[0]) for user in trip_motion_all_user_wo_label for trip in user]
 
@@ -257,7 +260,7 @@ print('Descriptive statistics for labeled',  pd.Series(trip_length_labeled).desc
 print('Descriptive statistics for unlabeled',  pd.Series(trip_length_unlabeled).describe(percentiles=[0.05, 0.1, 0.15,
                                                                                                       0.25, 0.5, 0.75,
                                                                                                       0.85, 0.9, 0.95]))
-
+'''
 # Now, we have all trips in a list from all users. So time to Create train, test, and validation sets
 train_trip_motion_all_user_with_label = []
 val_trip_motion_all_user_with_label = []
@@ -268,11 +271,15 @@ for user in trip_motion_all_user_with_label:
     train_trip_motion_all_user_with_label.extend(user[:round(0.7*length)])
     val_trip_motion_all_user_with_label.extend(user[round(0.7*length):round(0.8*length)])
     test_trip_motion_all_user_with_label.extend(user[round(0.8*length):])
-
+'''
+# Put trips of all user together.
+trip_motion_all_user_with_label = [trip for user in trip_motion_all_user_with_label for trip in user]
+random.shuffle(trip_motion_all_user_with_label)
 trip_motion_all_user_wo_label = [trip for user in trip_motion_all_user_wo_label for trip in user]
+random.shuffle(trip_motion_all_user_wo_label)
+
 
 with open('paper2_trips_motion_features_NotFixedLength_woOutliers.pickle', 'wb') as f:
-    pickle.dump([train_trip_motion_all_user_with_label, val_trip_motion_all_user_with_label,
-                 test_trip_motion_all_user_with_label, trip_motion_all_user_wo_label], f)
+    pickle.dump([trip_motion_all_user_with_label, trip_motion_all_user_wo_label], f)
 
 print('Running time', time.clock() - current)
