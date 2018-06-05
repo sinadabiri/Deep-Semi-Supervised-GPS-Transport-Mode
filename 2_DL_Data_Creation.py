@@ -161,6 +161,7 @@ X_unlabeled, _ = min_max_scaler(X_unlabeled, 0, 1)
 
 # Test for being stratified
 a = len(np.where(kfold_dataset[4][1]==0)[0])/len(kfold_dataset[4][1])
+
 b = len(np.where(kfold_dataset[4][4]==0)[0])/len(kfold_dataset[4][4])
 
 with open('paper2_data_for_DL_kfold_dataset_RL.pickle', 'wb') as f:
