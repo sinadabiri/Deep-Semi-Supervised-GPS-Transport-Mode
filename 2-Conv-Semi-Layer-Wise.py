@@ -186,13 +186,15 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter, epochs_ae=10, epochs
     Train_Y_ori = one_fold[1]
     random.seed(seed)
     np.random.seed(seed)
-    random_sample = np.random.choice(len(Train_X), size=round(prop*len(Train_X)), replace=False, p=None)
+    random_sample = np.random.choice(len(Train_X), size=round(0.5*len(Train_X)), replace=False, p=None)
     Train_X = Train_X[random_sample]
     Train_Y_ori = Train_Y_ori[random_sample]
     Train_X, Train_Y, Train_Y_ori, Val_X, Val_Y, Val_Y_ori = train_val_split(Train_X, Train_Y_ori)
     Test_X = one_fold[2]
     Test_Y = one_fold[3]
     Test_Y_ori = one_fold[4]
+    random_sample = np.random.choice(len(X_unlabeled), size=round(prop * len(X_unlabeled)), replace=False, p=None)
+    X_unlabeled = X_unlabeled[random_sample]
     Train_X_Comb = np.vstack((X_unlabeled, Train_X))
     np.random.shuffle(Train_X_Comb)
     input_size = list(np.shape(Test_X)[1:])
@@ -311,13 +313,13 @@ def training_all_folds(label_proportions, num_filter):
         mean_std_metrics[index] = [mean_metrics, std_metrics]
     for index, prop in enumerate(label_proportions):
         print('All Test Accuracy For Semi-AE+Cls with Prop {} are: {}'.format(prop, test_accuracy_fold[index]))
-        print('Semi-AE+Cls test accuracy for prop {}: Mean {}, std {}'.format(prop, mean_std_acc[index][0], mean_std_acc[index][1]))
-        print('Semi-AE+Cls test metrics for prop {}: Mean {}, std {}'.format(prop, mean_std_metrics[index][0], mean_std_metrics[index][1]))
+        print('Semi-Layer-Wise test accuracy for prop {}: Mean {}, std {}'.format(prop, mean_std_acc[index][0], mean_std_acc[index][1]))
+        print('Semi-Layer-Wise test metrics for prop {}: Mean {}, std {}'.format(prop, mean_std_metrics[index][0], mean_std_metrics[index][1]))
         print('\n')
     return test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics
 
-test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.1, 0.25, 0.50, 0.75, 1.0],
-                                                  num_filter=[32, 32, 64, 64, 128, 128])
+test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.05, 0.15, 0.35],
+                                                  num_filter=[32, 32, 64, 64])
 a = 1
 
 

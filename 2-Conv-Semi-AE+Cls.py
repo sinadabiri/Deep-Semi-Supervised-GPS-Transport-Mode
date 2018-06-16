@@ -15,7 +15,9 @@ from sklearn.metrics import f1_score
 from sklearn.metrics import roc_auc_score
 import keras
 
-
+y_true = [2, 0, 2, 2, 0, 1]
+y_pred = [0, 0, 2, 2, 0, 2]
+print(confusion_matrix(y_true, y_pred))
 
 # Training Settings
 batch_size = 100
@@ -251,13 +253,15 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
     Train_Y_ori = one_fold[1]
     random.seed(seed)
     np.random.seed(seed)
-    random_sample = np.random.choice(len(Train_X), size=round(prop*len(Train_X)), replace=False, p=None)
+    random_sample = np.random.choice(len(Train_X), size=round(0.5*len(Train_X)), replace=False, p=None)
     Train_X = Train_X[random_sample]
     Train_Y_ori = Train_Y_ori[random_sample]
     Train_X, Train_Y, Train_Y_ori, Val_X, Val_Y, Val_Y_ori = train_val_split(Train_X, Train_Y_ori)
     Test_X = one_fold[2]
     Test_Y = one_fold[3]
     Test_Y_ori = one_fold[4]
+    random_sample = np.random.choice(len(X_unlabeled), size=round(prop * len(X_unlabeled)), replace=False, p=None)
+    X_unlabeled = X_unlabeled[random_sample]
     Train_X_Comb = X_unlabeled
 
     input_size = list(np.shape(Test_X)[1:])
@@ -291,7 +295,7 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
             num_batches = len(Train_X_Comb) // batch_size
             # alfa_val1 = [0.0, 0.0, 1.0, 1.0, 1.0]
             # beta_val1 = [1.0, 1.0, 0.1, 0.1, 0.1]
-            alfa_val = 0  ## 0
+            alfa_val = 1  ## 0
             beta_val = 1
             change_to_ae = 1  # the value defines that algorithm is ready to change to joint ae-cls
             change_times = 0  # No. of times change from cls to ae-cls, which is 2 for this training strategy
@@ -393,6 +397,8 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
         f1_macro = f1_score(Test_Y_ori, y_pred, average='macro')
         f1_weight = f1_score(Test_Y_ori, y_pred, average='weighted')
         print('Semi-AE+Cls Test Accuracy of the Ensemble: ', test_accuracy)
+        print('Confusion Matrix: ', confusion_matrix(Test_Y_ori, y_pred))
+
     return test_accuracy, f1_macro, f1_weight
 
 def training_all_folds(label_proportions, num_filter):
@@ -421,6 +427,6 @@ def training_all_folds(label_proportions, num_filter):
     return test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics
 
 test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(
-    label_proportions=[0.1, 0.25, 0.5, 0.75, 1.0], num_filter=[32, 32, 64, 64, 128, 128])
+    label_proportions=[0.15, 0.35], num_filter=[32, 32, 64, 64])
 
 
