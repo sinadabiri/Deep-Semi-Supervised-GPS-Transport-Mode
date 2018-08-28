@@ -21,5 +21,6 @@ The GeoLife dataset uses in this project is available at: https://www.microsoft.
  
  **Semi-supervised models can be simply utilized in all types of applications by just changing the settings related to the new data types**
 
+## Contact Information
 Please email me at sina@vt.edu if you have any questions. 
 
