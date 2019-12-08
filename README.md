@@ -1,6 +1,12 @@
 # Deep-Semi-Supervised-GPS-Transport-Mode
 ## Summary
-This is the code repository for the paper entitled: "Semi-Supervised Deep Learning Approach for Transportation Mode Identification UsingGPS Trajectory Data", submitted to IEEE Transactions on Knowledge and Data Engineering. The paper has been published in IEEE TKDE, which is a high-quality algorithmic journal in data mining. 
+This is the code repository for the paper entitled: "Semi-Supervised Deep Learning Approach for Transportation Mode Identification UsingGPS Trajectory Data", published to IEEE Transactions on Knowledge and Data Engineering, the second top venue in data mining and analysis, according to [Google Scholar](https://scholar.google.com/citations?view_op=top_venues&hl=en&vq=eng_datamininganalysis). 
+
+If you are interested in this work and use the materials, please cite the following papers:
+
+(1) **Dabiri, Sina, et al. "Semi-Supervised Deep Learning Approach for Transportation Mode Identification Using GPS Trajectory Data." IEEE Transactions on Knowledge and Data Engineering (2019).**
+
+(2) **Dabiri, Sina, and Kevin Heaslip. "Inferring transportation modes from GPS trajectories using a convolutional neural network." Transportation research part C: emerging technologies 86 (2018): 360-371.**
 
 The abstract is as follows: 
 "Identification of travelers’ transportation modes is a fundamental step for various problems that arise in the domain of transportation such as travel demand analysis, transport planning, and traffic management. In this paper, we aim to identify users’ transportation modes purely based on their GPS trajectories. A majority of studies have proposed mode inference models based on hand-crafted features, which might be vulnerable to traffic and environmental conditions. Furthermore, the classification task in almost
