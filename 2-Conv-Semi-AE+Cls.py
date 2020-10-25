@@ -20,7 +20,8 @@ y_pred = [0, 0, 2, 2, 0, 2]
 print(confusion_matrix(y_true, y_pred))
 
 # Training Settings
-batch_size = 100
+batch_size = 10
+# batch_size = 100
 latent_dim = 800
 change = 10
 units = 800  # num unit in the MLP hidden layer
@@ -33,13 +34,13 @@ padding = 'same'
 strides = 1
 pool_size = (1, 2)
 num_class = 5
-reg_l2 = tf.contrib.layers.l1_regularizer(scale=0.1)
-initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+reg_l2 = tf.keras.regularizers.l1(l=0.1)
+initializer = tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution=("uniform" if True else "truncated_normal"), seed=None, dtype=tf.float32)
 #initializer = tf.truncated_normal_initializer()
 
 # Import the data
 #filename = '../Mode-codes-Revised/paper2_data_for_DL_train_val_test.pickle'
-filename = '../Mode-codes-Revised/paper2_data_for_DL_kfold_dataset_RL.pickle'
+filename = 'paper2_data_for_DL_kfold_dataset_RL.pickle'
 with open(filename, 'rb') as f:
     kfold_dataset, X_unlabeled = pickle.load(f)
 
@@ -53,18 +54,18 @@ def encoder_network(latent_dim, num_filter_ae_cls, input_combined, input_labeled
     layers_shape = []
     for i in range(len(num_filter_ae_cls)):
         scope_name = 'encoder_set_' + str(i + 1)
-        with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE, initializer=initializer):
-            encoded_combined = tf.layers.conv2d(inputs=encoded_combined, activation=tf.nn.relu, filters=num_filter_ae_cls[i],
+        with tf.compat.v1.variable_scope(scope_name, reuse=tf.compat.v1.AUTO_REUSE, initializer=initializer):
+            encoded_combined = tf.compat.v1.layers.conv2d(inputs=encoded_combined, activation=tf.nn.relu, filters=num_filter_ae_cls[i],
                                                 name='conv_1', kernel_size=kernel_size, strides=strides,
                                                 padding=padding)
-        with tf.variable_scope(scope_name, reuse=True, initializer=initializer):
-            encoded_labeled = tf.layers.conv2d(inputs=encoded_labeled, activation=tf.nn.relu, filters=num_filter_ae_cls[i],
+        with tf.compat.v1.variable_scope(scope_name, reuse=True, initializer=initializer):
+            encoded_labeled = tf.compat.v1.layers.conv2d(inputs=encoded_labeled, activation=tf.nn.relu, filters=num_filter_ae_cls[i],
                                                name='conv_1', kernel_size=kernel_size, strides=strides, padding=padding)
 
         if i % 2 != 0:
-            encoded_combined = tf.layers.max_pooling2d(encoded_combined, pool_size=pool_size,
+            encoded_combined = tf.compat.v1.layers.max_pooling2d(encoded_combined, pool_size=pool_size,
                                                           strides=pool_size, name='pool')
-            encoded_labeled = tf.layers.max_pooling2d(encoded_labeled, pool_size=pool_size,
+            encoded_labeled = tf.compat.v1.layers.max_pooling2d(encoded_labeled, pool_size=pool_size,
                                                           strides=pool_size, name='pool')
         layers_shape.append(encoded_combined.get_shape().as_list())
 
@@ -85,18 +86,18 @@ def decoder_network(latent_combined, input_size, kernel_size, padding, activatio
         for i in range(len(num_filter_)):
             decoded_combined = tf.keras.layers.UpSampling2D(name='UpSample', size=pool_size)(decoded_combined)
             scope_name = 'decoder_set_' + str(2*i)
-            with tf.variable_scope(scope_name, initializer=initializer):
-                decoded_combined = tf.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
+            with tf.compat.v1.variable_scope(scope_name, initializer=initializer):
+                decoded_combined = tf.compat.v1.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
                                                               filters=num_filter_[i], name='deconv_1',
                                                               kernel_size=kernel_size,
                                                               strides=strides, padding=padding)
             scope_name = 'decoder_set_' + str(2*i + 1)
-            with tf.variable_scope(scope_name, initializer=initializer):
+            with tf.compat.v1.variable_scope(scope_name, initializer=initializer):
                 filter_size, activation = (input_size[-1], tf.nn.sigmoid) if i == len(num_filter_) - 1 else (int(num_filter_[i] / 2), tf.nn.relu)
                 if i == len(num_filter_): # change it len(num_filter_)-1 if spatial size is not dividable by 2
                     kernel_size = (1, input_size[1] - (decoded_combined.get_shape().as_list()[2] - 1) * strides)
                     padding = 'valid'
-                decoded_combined = tf.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
+                decoded_combined = tf.compat.v1.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
                                                               filters=filter_size, name='deconv_1',
                                                               kernel_size=kernel_size,
                                                               strides=strides, padding=padding)
@@ -104,18 +105,18 @@ def decoder_network(latent_combined, input_size, kernel_size, padding, activatio
         num_filter_ = sorted(set(num_filter_), reverse=True)
         for i in range(len(num_filter_)):
             scope_name = 'decoder_set_' + str(2 * i)
-            with tf.variable_scope(scope_name, initializer=initializer):
-                decoded_combined = tf.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
+            with tf.compat.v1.variable_scope(scope_name, initializer=initializer):
+                decoded_combined = tf.compat.v1.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
                                                               filters=num_filter_[i], name='deconv_1',
                                                               kernel_size=kernel_size,
                                                               strides=strides, padding=padding)
             scope_name = 'decoder_set_' + str(2 * i + 1)
-            with tf.variable_scope(scope_name, initializer=initializer):
+            with tf.compat.v1.variable_scope(scope_name, initializer=initializer):
                 filter_size, activation = (input_size[-1], tf.nn.sigmoid) if i == len(num_filter_) - 1 else (int(num_filter_[i] / 2), tf.nn.relu)
                 if i == len(num_filter_): # change it len(num_filter_)-1 if spatial size is not dividable by 2
                     kernel_size = (1, input_size[1] - (decoded_combined.get_shape().as_list()[2] - 1) * strides)
                     padding = 'valid'
-                decoded_combined = tf.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
+                decoded_combined = tf.compat.v1.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
                                                               filters=filter_size, name='deconv_1',
                                                               kernel_size=kernel_size,
                                                               strides=strides, padding=padding)
@@ -129,29 +130,29 @@ def classifier_mlp(latent_labeled, num_class, num_filter_cls, num_dense):
     conv_layer = latent_labeled
     for i in range(len(num_filter_cls)):
         scope_name = 'cls_conv_set_' + str(i + 1)
-        with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE, initializer=initializer):
-            conv_layer = tf.layers.conv2d(inputs=conv_layer, activation=tf.nn.relu, filters=num_filter_cls[i],
+        with tf.compat.v1.variable_scope(scope_name, reuse=tf.compat.v1.AUTO_REUSE, initializer=initializer):
+            conv_layer = tf.compat.v1.layers.conv2d(inputs=conv_layer, activation=tf.nn.relu, filters=num_filter_cls[i],
                                           kernel_size=kernel_size, strides=strides, padding=padding,
                                           kernel_initializer=initializer)
         if len(num_filter_cls) % 2 == 0:
             if i % 2 != 0:
-                conv_layer = tf.layers.max_pooling2d(conv_layer, pool_size=pool_size,strides=pool_size, name='pool')
+                conv_layer = tf.compat.v1.layers.max_pooling2d(conv_layer, pool_size=pool_size,strides=pool_size, name='pool')
         else:
             if i % 2 == 0:
-                conv_layer = tf.layers.max_pooling2d(conv_layer, pool_size=pool_size,strides=pool_size, name='pool')
+                conv_layer = tf.compat.v1.layers.max_pooling2d(conv_layer, pool_size=pool_size,strides=pool_size, name='pool')
 
-    dense = tf.layers.flatten(conv_layer)
+    dense = tf.compat.v1.layers.flatten(conv_layer)
     units = int(dense.get_shape().as_list()[-1] / 4)
     for i in range(num_dense):
         scope_name = 'cls_dense_set_' + str(i + 1)
-        with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE, initializer=initializer):
-            dense = tf.layers.dense(dense, units, activation=tf.nn.relu, kernel_initializer=initializer)
+        with tf.compat.v1.variable_scope(scope_name, reuse=tf.compat.v1.AUTO_REUSE, initializer=initializer):
+            dense = tf.compat.v1.layers.dense(dense, units, activation=tf.nn.relu, kernel_initializer=initializer)
         units /= 2
     dense_last = dense
-    dense = tf.layers.dropout(dense, 0.5)
+    dense = tf.compat.v1.layers.dropout(dense, 0.5)
     scope_name = 'cls_last_dense_'
-    with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE, initializer=initializer):
-        classifier_output = tf.layers.dense(dense, num_class, name='FC_4', kernel_initializer=initializer)
+    with tf.compat.v1.variable_scope(scope_name, reuse=tf.compat.v1.AUTO_REUSE, initializer=initializer):
+        classifier_output = tf.compat.v1.layers.dense(dense, num_class, name='FC_4', kernel_initializer=initializer)
     return classifier_output, dense_last
 
 
@@ -163,19 +164,19 @@ def semi_supervised(input_labeled, input_combined, true_label, alpha, beta, num_
     classifier_output, dense = classifier_mlp(latent_labeled, num_class, num_filter_cls=num_filter_cls, num_dense=num_dense)
     #classifier_output = classifier_cnn(latent_labeled, num_filter=num_filter)
 
-    loss_ae = tf.reduce_mean(tf.square(input_combined - decoded_output), name='loss_ae') * 100
-    loss_cls = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=true_label, logits=classifier_output),
+    loss_ae = tf.reduce_mean(input_tensor=tf.square(input_combined - decoded_output), name='loss_ae') * 100
+    loss_cls = tf.reduce_mean(input_tensor=tf.nn.softmax_cross_entropy_with_logits(labels=true_label, logits=classifier_output),
                               name='loss_cls')
     total_loss = alpha*loss_ae + beta*loss_cls
     #total_loss = beta * loss_ae + alpha * loss_cls
-    loss_reg = tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES, 'EasyNet'))
-    train_op_ae = tf.train.AdamOptimizer().minimize(loss_ae)
-    train_op_cls = tf.train.AdamOptimizer().minimize(loss_cls)
-    train_op = tf.train.AdamOptimizer().minimize(total_loss)
+    loss_reg = tf.reduce_sum(input_tensor=tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES, 'EasyNet'))
+    train_op_ae = tf.compat.v1.train.AdamOptimizer().minimize(loss_ae)
+    train_op_cls = tf.compat.v1.train.AdamOptimizer().minimize(loss_cls)
+    train_op = tf.compat.v1.train.AdamOptimizer().minimize(total_loss)
     # train_op = train_op = tf.layers.optimize_loss(total_loss, optimizer='Adam')
 
-    correct_prediction = tf.equal(tf.argmax(true_label, 1), tf.argmax(classifier_output, 1))
-    accuracy_cls = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    correct_prediction = tf.equal(tf.argmax(input=true_label, axis=1), tf.argmax(input=classifier_output, axis=1))
+    accuracy_cls = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
     return loss_ae, loss_cls, accuracy_cls, train_op_ae, train_op_cls, classifier_output, dense, train_op, total_loss
 
 
@@ -209,13 +210,13 @@ def loss_acc_evaluation(Test_X, Test_Y, loss_cls, accuracy_cls, input_labeled, t
                                             feed_dict={input_labeled: Test_X_batch,
                                                        true_label: Test_Y_batch})
         metrics.append([loss_cls_, accuracy_cls_])
-    Test_X_batch = Test_X[(i + 1) * batch_size:]
-    Test_Y_batch = Test_Y[(i + 1) * batch_size:]
-    if len(Test_X_batch) >= 1:
-        loss_cls_, accuracy_cls_ = sess.run([loss_cls, accuracy_cls],
+        Test_X_batch = Test_X[(i + 1) * batch_size:]
+        Test_Y_batch = Test_Y[(i + 1) * batch_size:]
+        if len(Test_X_batch) >= 1:
+            loss_cls_, accuracy_cls_ = sess.run([loss_cls, accuracy_cls],
                                         feed_dict={input_labeled: Test_X_batch,
                                                    true_label: Test_Y_batch})
-        metrics.append([loss_cls_, accuracy_cls_])
+            metrics.append([loss_cls_, accuracy_cls_])
     mean_ = np.mean(np.array(metrics), axis=0)
     #print('Epoch Num {}, Loss_cls_Val {}, Accuracy_Val {}'.format(k, mean_[0], mean_[1]))
     return mean_[0], mean_[1]
@@ -274,21 +275,21 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
     # This for loop is only for implementing ensemble
     for z in range(len(num_filter_ae_cls_all)):
         # Change the following seed to None only for Ensemble.
-        tf.reset_default_graph()  # Used for ensemble
-        with tf.Session() as sess:
-            input_labeled = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_labeled')
-            input_combined = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_combined')
-            true_label = tf.placeholder(tf.float32, shape=[None, num_class], name='true_label')
-            alpha = tf.placeholder(tf.float32, shape=(), name='alpha')
-            beta = tf.placeholder(tf.float32, shape=(), name='beta')
+        tf.compat.v1.reset_default_graph()  # Used for ensemble
+        with tf.compat.v1.Session() as sess:
+            input_labeled = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_labeled')
+            input_combined = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_combined')
+            true_label = tf.compat.v1.placeholder(tf.float32, shape=[None, num_class], name='true_label')
+            alpha = tf.compat.v1.placeholder(tf.float32, shape=(), name='alpha')
+            beta = tf.compat.v1.placeholder(tf.float32, shape=(), name='beta')
 
             num_filter_ae_cls = num_filter_ae_cls_all[z]
             loss_ae, loss_cls, accuracy_cls, train_op_ae, train_op_cls, classifier_output, dense, train_op, total_loss = semi_supervised(
                 input_labeled=input_labeled, input_combined=input_combined, true_label=true_label, alpha=alpha,
                 beta=beta, num_class=num_class, latent_dim=latent_dim, num_filter_ae_cls=num_filter_ae_cls,
                 num_filter_cls=num_filter_cls, num_dense=num_dense, input_size=input_size)
-            sess.run(tf.global_variables_initializer())
-            saver = tf.train.Saver(max_to_keep=20)
+            sess.run(tf.compat.v1.global_variables_initializer())
+            saver = tf.compat.v1.train.Saver(max_to_keep=20)
             # Train_X, Train_Y = ensemble_train_set(orig_Train_X, orig_Train_Y)
             val_accuracy = {-2: 0, -1: 0}
             val_loss = {-2: 10, -1: 10}
@@ -323,16 +324,16 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
                     #print('Epoch Num {}, Batches Num {}, Loss_AE {}, Loss_cls {}, Accuracy_train {}'.format
                           #(k, i, np.round(loss_ae_, 3), np.round(loss_cls_, 3), np.round(accuracy_cls_, 3)))
 
-                unlab_index_range = x_combined_index[(i + 1) * batch_size:]
-                lab_index_range = x_labeled_index[(i + 1) * batch_size:]
-                X_ae = Train_X_Comb[unlab_index_range]
-                X_cls = Train_X[lab_index_range]
-                Y_cls = Train_Y[lab_index_range]
-                loss_ae_, loss_cls_, accuracy_cls_, _ = sess.run([loss_ae, loss_cls, accuracy_cls, train_op],
+                    unlab_index_range = x_combined_index[(i + 1) * batch_size:]
+                    lab_index_range = x_labeled_index[(i + 1) * batch_size:]
+                    X_ae = Train_X_Comb[unlab_index_range]
+                    X_cls = Train_X[lab_index_range]
+                    Y_cls = Train_Y[lab_index_range]
+                    loss_ae_, loss_cls_, accuracy_cls_, _ = sess.run([loss_ae, loss_cls, accuracy_cls, train_op],
                                                                  feed_dict={alpha: alfa_val, beta: beta_val,
                                                                             input_combined: X_ae,
                                                                             input_labeled: X_cls, true_label: Y_cls})
-                print('Epoch Num {}, Batches Num {}, Loss_AE {}, Loss_cls {}, Accuracy_train {}'.format
+                    print('Epoch Num {}, Batches Num {}, Loss_AE {}, Loss_cls {}, Accuracy_train {}'.format
                       (k, i, np.round(loss_ae_, 3), np.round(loss_cls_, 3), np.round(accuracy_cls_, 3)))
 
                 print('====================================================')
@@ -340,7 +341,11 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
                 val_loss.update({k: loss_val})
                 val_accuracy.update({k: acc_val})
                 print('====================================================')
-                saver.save(sess, "/Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop), global_step=k)
+                try:
+                    os.makedirs("./Conv-Semi-TF-PS/" + '2/' + str(z) + '/')
+                except:
+                    pass
+                saver.save(sess, "./Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop), global_step=k)
                 # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k) + ".ckpt"
                 # checkpoint = os.path.join(os.getcwd(), save_path)
                 # saver.save(sess, checkpoint)
@@ -351,7 +356,7 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
                     # save_path = "/Conv-Semi/" + str(prop) + '/' + str(k-1) + ".ckpt"
                     # checkpoint = os.path.join(os.getcwd(), save_path)
                     max_acc = max(val_accuracy.items(), key=lambda k: k[1])[0]
-                    save_path = "/Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop) + '-' + str(max_acc)
+                    save_path = "./Conv-Semi-TF-PS/" + '2/' + str(z) + '/' + str(prop) + '-' + str(max_acc)
                     saver.restore(sess, save_path)
                     alfa_val = 1.0
                     beta_val = 0.1

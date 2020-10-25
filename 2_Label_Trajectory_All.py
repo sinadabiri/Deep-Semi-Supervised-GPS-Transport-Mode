@@ -2,7 +2,7 @@ import pickle
 from datetime import datetime
 import os
 import time
-start_time = time.clock()
+start_time = time.time()
 
 
 def days_date(time_str):
@@ -21,7 +21,7 @@ Mode_Index = {"walk": 0, "run": 9, "bike": 1, "bus": 2, "car": 3, "taxi": 3, "su
 # Ground modes are the modes that we use in this paper.
 Ground_Mode = ['walk', 'bike', 'bus', 'car', 'taxi', 'subway', 'railway', 'train']
 
-geolife_dir = '../Geolife Trajectories 1.3-Raw-All/Geolife Trajectories 1.3/Data/'
+geolife_dir = '../Geolife Trajectories 1.3/Data/'
 users_folder = os.listdir(geolife_dir)
 trajectory_all_user_wo_label = []
 trajectory_all_user_with_label = []
@@ -97,7 +97,11 @@ for index, user in enumerate(label_all_user):
 
     for k, v in classes.items():
         for value in v:
-            trajectory_all_user_with_label[index][value].append(k)
+            try:
+                trajectory_all_user_with_label[index][value].append(k)
+            except:
+                pass
+
     labeled_trajectory = list(filter(lambda x: len(x) == 4, trajectory_all_user_with_label[index]))
     trajectory_all_user_with_label_Final.append(labeled_trajectory)
     unlabeled_trajectory = list(filter(lambda x: len(x) == 3, trajectory_all_user_with_label[index]))
@@ -107,4 +111,4 @@ for index, user in enumerate(label_all_user):
 with open("paper2_Trajectory_Label.pickle", 'wb') as f:
     pickle.dump([trajectory_all_user_with_label_Final, trajectory_all_user_wo_label], f)
 
-print(time.clock() - start_time, 'Seconds')
+print(time.time() - start_time, 'Seconds')
