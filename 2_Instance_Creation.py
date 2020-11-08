@@ -100,9 +100,12 @@ def compute_delta_time(p1, p2):
 
 
 def compute_distance(p1, p2):
-    lat_long_1 = (p1[0], p1[1])
-    lat_long_2 = (p2[0], p2[1])
-    return geodesic (lat_long_1, lat_long_2).meters
+    try:
+        lat_long_1 = (p1[0], p1[1])
+        lat_long_2 = (p2[0], p2[1])
+        return geodesic (lat_long_1, lat_long_2).meters
+    except:
+        return 0 
 
 
 def compute_speed(distance, delta_time):
