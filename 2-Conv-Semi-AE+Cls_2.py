@@ -25,7 +25,7 @@ latent_dim = 800
 change = 10
 units = 800  # num unit in the MLP hidden layer
 num_filter_ae_cls = [32, 32, 64, 64, 128, 128]  # conv_layers and No. of its channels for AE + CLS
-num_filter_cls = [32, 32]  # conv_layers and No. of its channel for only cls
+num_filter_cls = [32, 32, 64, 64]  # conv_layers and No. of its channel for only cls
 num_dense = 0  # number of dense layer in classifier excluding the last layer
 kernel_size = (1, 3)
 activation = tf.nn.relu
@@ -247,19 +247,26 @@ def train_val_split(Train_X, Train_Y_ori):
     Train_Y = keras.utils.to_categorical(Train_Y_ori, num_classes=num_class)
     return Train_X, Train_Y, Train_Y_ori, Val_X, Val_Y, Val_Y_ori
 
+def get_label_unlabeled_size(len_label, len_unlabel, prop):
+    if prop == 0:
+        return 0, len_unlabel
+    elif prop == 1:
+        return len_label, 0
+
+    total_label_max = len_label/prop
+    total_unlabel_max = len_unlabel/(1-prop)
+    if total_label_max > total_unlabel_max:
+        label_size = prop * total_unlabel_max
+        unlabel_size = (1-prop) * total_unlabel_max
+    else:
+        label_size = prop * total_label_max
+        unlabel_size = (1-prop) * total_label_max    
+    return int(label_size), int(unlabel_size)
 
 def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae_cls=20):
     Train_X = one_fold[0]
     Train_Y_ori = one_fold[1]
-    if prop != 0:
-        total_data = len(Train_X) * 1/prop
-        #prob = 0.25 means 25% labeled 
-        labeled_size = len(Train_X)
-        unlabeled_size = round((1-prop)*total_data)
-    else:
-        total_data = len(X_unlabeled)
-        labeled_size = 0
-        unlabeled_size = total_data
+    labeled_size , unlabeled_size = get_label_unlabeled_size(len(Train_X),len(X_unlabeled), prop)
     random.seed(seed)
     np.random.seed(seed)
     # random_sample = np.random.choice(len(Train_X), size=round(0.5*len(Train_X)), replace=False, p=None)
@@ -441,7 +448,7 @@ def training_all_folds(label_proportions, num_filter):
         print('\n')
     return test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics
 
-# test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0, 0.25, 0.5, 0.75, 1], num_filter=[32, 32, 64, 64])
-test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.25], num_filter=[32, 32, 64, 64])
+test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.1,0.25, 0.5, 0.75], num_filter=[32, 32, 64, 64])
+# test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.25], num_filter=[32, 32, 64, 64])
 
 
