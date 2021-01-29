@@ -25,7 +25,7 @@ latent_dim = 800
 change = 10
 units = 800  # num unit in the MLP hidden layer
 num_filter_ae_cls = [32, 32, 64, 64, 128, 128]  # conv_layers and No. of its channels for AE + CLS
-num_filter_cls = []  # conv_layers and No. of its channel for only cls
+num_filter_cls = [32, 32, 64, 64]  # conv_layers and No. of its channel for only cls
 num_dense = 0  # number of dense layer in classifier excluding the last layer
 kernel_size = (1, 3)
 activation = tf.nn.relu
@@ -247,20 +247,38 @@ def train_val_split(Train_X, Train_Y_ori):
     Train_Y = keras.utils.to_categorical(Train_Y_ori, num_classes=num_class)
     return Train_X, Train_Y, Train_Y_ori, Val_X, Val_Y, Val_Y_ori
 
+def get_label_unlabeled_size(len_label, len_unlabel, prop):
+    if prop == 0:
+        return 0, len_unlabel
+    elif prop == 1:
+        return len_label, 0
+
+    total_label_max = len_label/prop
+    total_unlabel_max = len_unlabel/(1-prop)
+    if total_label_max > total_unlabel_max:
+        label_size = prop * total_unlabel_max
+        unlabel_size = (1-prop) * total_unlabel_max
+    else:
+        label_size = prop * total_label_max
+        unlabel_size = (1-prop) * total_label_max    
+    return int(label_size), int(unlabel_size)
 
 def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae_cls=20):
     Train_X = one_fold[0]
     Train_Y_ori = one_fold[1]
+    labeled_size , unlabeled_size = get_label_unlabeled_size(len(Train_X),len(X_unlabeled), prop)
     random.seed(seed)
     np.random.seed(seed)
-    random_sample = np.random.choice(len(Train_X), size=round(0.5*len(Train_X)), replace=False, p=None)
+    # random_sample = np.random.choice(len(Train_X), size=round(0.5*len(Train_X)), replace=False, p=None)
+    random_sample = np.random.choice(len(Train_X), size=labeled_size, replace=False, p=None)
     Train_X = Train_X[random_sample]
     Train_Y_ori = Train_Y_ori[random_sample]
     Train_X, Train_Y, Train_Y_ori, Val_X, Val_Y, Val_Y_ori = train_val_split(Train_X, Train_Y_ori)
     Test_X = one_fold[2]
     Test_Y = one_fold[3]
     Test_Y_ori = one_fold[4]
-    random_sample = np.random.choice(len(X_unlabeled), size=round(prop * len(X_unlabeled)), replace=False, p=None)
+    random_sample = np.random.choice(len(X_unlabeled), size=unlabeled_size, replace=False, p=None)
+    # random_sample = np.random.choice(len(X_unlabeled), size=round(prop * len(X_unlabeled)), replace=False, p=None)
     X_unlabeled = X_unlabeled[random_sample]
     Train_X_Comb = X_unlabeled
 
@@ -323,8 +341,8 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter_ae_cls_all, epochs_ae
                     #print('Epoch Num {}, Batches Num {}, Loss_AE {}, Loss_cls {}, Accuracy_train {}'.format
                           #(k, i, np.round(loss_ae_, 3), np.round(loss_cls_, 3), np.round(accuracy_cls_, 3)))
 
-                    unlab_index_range = x_combined_index[i * batch_size:(i + 1) * batch_size]
-                    lab_index_range = x_labeled_index[i * batch_size:(i + 1) * batch_size]
+                    unlab_index_range = x_combined_index[(i ) * batch_size:(i + 1) * batch_size:]
+                    lab_index_range = x_labeled_index[(i) * batch_size:(i + 1) * batch_size:]
                     X_ae = Train_X_Comb[unlab_index_range]
                     X_cls = Train_X[lab_index_range]
                     Y_cls = Train_Y[lab_index_range]
@@ -430,7 +448,7 @@ def training_all_folds(label_proportions, num_filter):
         print('\n')
     return test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics
 
-test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(
-    label_proportions=[0.15, 0.35], num_filter=[32, 32, 64, 64])
+test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.1,0.25, 0.5, 0.75], num_filter=[32, 32, 64, 64])
+# test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.25], num_filter=[32, 32, 64, 64])
 
 

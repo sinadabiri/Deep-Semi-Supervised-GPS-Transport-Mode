@@ -14,9 +14,9 @@ padding = 'same'
 strides = 1
 pool_size = (1, 2)
 num_class = 5
-initializer = tf.glorot_uniform_initializer()
+initializer = tf.compat.v1.glorot_uniform_initializer()
 
-filename = '../Mode-codes-Revised/paper2_data_for_DL_kfold_dataset.pickle'
+filename = 'paper2_data_for_DL_kfold_dataset_RL.pickle'
 with open(filename, 'rb') as f:
     kfold_dataset, _ = pickle.load(f)
 
@@ -25,33 +25,33 @@ def classifier(num_filter, input_labeled, num_dense):
     conv_layer = input_labeled
     for i in range(len(num_filter)):
         scope_name = 'encoder_set_' + str(i + 1)
-        with tf.variable_scope(scope_name):
-            conv_layer = tf.layers.conv2d(inputs=conv_layer, activation=tf.nn.relu, filters=num_filter[i],
+        with tf.compat.v1.variable_scope(scope_name):
+            conv_layer = tf.compat.v1.layers.conv2d(inputs=conv_layer, activation=tf.nn.relu, filters=num_filter[i],
                                                 name='conv_1', kernel_size=kernel_size, strides=strides,
                                                 padding=padding)
         if i % 2 != 0:
-            conv_layer = tf.layers.max_pooling2d(conv_layer, pool_size=pool_size,
+            conv_layer = tf.compat.v1.layers.max_pooling2d(conv_layer, pool_size=pool_size,
                                                           strides=pool_size, name='pool')
 
-    dense = tf.layers.flatten(conv_layer)
+    dense = tf.compat.v1.layers.flatten(conv_layer)
     units = int(dense.get_shape().as_list()[-1] / 4)
     for i in range(num_dense):
-        dense = tf.layers.dense(dense, units, activation=tf.nn.relu)
+        dense = tf.compat.v1.layers.dense(dense, units, activation=tf.nn.relu)
         units /= 2
     dense_last = dense
-    dense = tf.layers.dropout(dense, 0.5)
-    classifier_output = tf.layers.dense(dense, num_class, name='FC_4')
+    dense = tf.compat.v1.layers.dropout(dense, 0.5)
+    classifier_output = tf.compat.v1.layers.dense(dense, num_class, name='FC_4')
     return classifier_output
 
 
 def cnn_model(input_labeled, true_label, num_filter):
     classifier_output = classifier(num_filter, input_labeled, num_dense)
-    loss_cls = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=true_label, logits=classifier_output),
+    loss_cls = tf.reduce_mean(input_tensor=tf.nn.softmax_cross_entropy_with_logits(labels=true_label, logits=classifier_output),
                               name='loss_cls')
-    train_op = tf.train.AdamOptimizer().minimize(loss_cls)
+    train_op = tf.compat.v1.train.AdamOptimizer().minimize(loss_cls)
 
-    correct_prediction = tf.equal(tf.argmax(true_label, 1), tf.argmax(classifier_output, 1))
-    accuracy_cls = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    correct_prediction = tf.equal(tf.argmax(input=true_label, axis=1), tf.argmax(input=classifier_output, axis=1))
+    accuracy_cls = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
     return loss_cls, accuracy_cls, train_op, classifier_output
 
 
@@ -123,13 +123,13 @@ def training(one_fold, seed, prop, num_filter, epochs=20):
     val_accuracy = {-2: 0, -1: 0}
     val_loss = {-2: 10, -1: 10}
 
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        input_labeled = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_labeled')
-        true_label = tf.placeholder(tf.float32, shape=[None, num_class], name='true_label')
+    tf.compat.v1.reset_default_graph()
+    with tf.compat.v1.Session() as sess:
+        input_labeled = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_labeled')
+        true_label = tf.compat.v1.placeholder(tf.float32, shape=[None, num_class], name='true_label')
         loss_cls, accuracy_cls, train_op, classifier_output = cnn_model(input_labeled, true_label, num_filter)
-        sess.run(tf.global_variables_initializer())
-        saver = tf.train.Saver(max_to_keep=20)
+        sess.run(tf.compat.v1.global_variables_initializer())
+        saver = tf.compat.v1.train.Saver(max_to_keep=20)
         num_batches = len(Train_X) // batch_size
         for k in range(epochs):
             for i in range(num_batches):
@@ -192,7 +192,9 @@ def training_all_folds(label_proportions, num_filter):
         print('\n')
     return test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics
 
-test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.1, 0.25, 0.50, 0.75, 1.0],
-                                                  num_filter=[32, 32, 64, 64, 128, 128])
+# test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[0.1, 0.25, 0.50, 0.75, 1.0],
+#                                                   num_filter=[32, 32, 64, 64, 128, 128])
+test_accuracy_fold, test_metrics_fold, mean_std_acc, mean_std_metrics = training_all_folds(label_proportions=[1.0],
+                                                  num_filter=[32, 32, 64, 64])
 
 

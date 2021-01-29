@@ -4,7 +4,7 @@ import keras
 
 # Import the final output from Instance_creation file, which is the filtered trips for all users.
 
-filename = '../Mode-codes-Revised/paper2_trips_motion_features_NotFixedLength_woOutliers.pickle'
+filename = 'paper2_trips_motion_features_NotFixedLength_woOutliers.pickle'
 with open(filename, 'rb') as f:
     trip_motion_all_user_with_label, trip_motion_all_user_wo_label = pickle.load(f)
     #trip_motion_all_user_with_label = trip_motion_all_user_with_label[:1000]

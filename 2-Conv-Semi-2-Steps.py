@@ -25,8 +25,8 @@ padding = 'same'
 strides = 1
 pool_size = (1, 2)
 num_class = 5
-reg_l2 = tf.contrib.layers.l1_regularizer(scale=0.1)
-initializer = tf.contrib.layers.xavier_initializer(uniform=True, seed=None, dtype=tf.float32)
+reg_l2 = tf.keras.regularizers.l1(l=0.1)
+initializer = tf.compat.v1.keras.initializers.VarianceScaling(scale=1.0, mode="fan_avg", distribution=("uniform" if True else "truncated_normal"), seed=None, dtype=tf.float32)
 #initializer = tf.truncated_normal_initializer()
 
 #sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
@@ -43,18 +43,18 @@ def encoder_network(latent_dim, num_filter, input_combined, input_labeled):
     layers_shape = []
     for i in range(len(num_filter)):
         scope_name = 'encoder_set_' + str(i + 1)
-        with tf.variable_scope(scope_name):
-            encoded_combined = tf.layers.conv2d(inputs=encoded_combined, activation=tf.nn.relu, filters=num_filter[i],
+        with tf.compat.v1.variable_scope(scope_name):
+            encoded_combined = tf.compat.v1.layers.conv2d(inputs=encoded_combined, activation=tf.nn.relu, filters=num_filter[i],
                                                 name='conv_1', kernel_size=kernel_size, strides=strides,
                                                 padding=padding)
-        with tf.variable_scope(scope_name, reuse=True):
-            encoded_labeled = tf.layers.conv2d(inputs=encoded_labeled, activation=tf.nn.relu, filters=num_filter[i],
+        with tf.compat.v1.variable_scope(scope_name, reuse=True):
+            encoded_labeled = tf.compat.v1.layers.conv2d(inputs=encoded_labeled, activation=tf.nn.relu, filters=num_filter[i],
                                                name='conv_1', kernel_size=kernel_size, strides=strides, padding=padding)
 
         if i % 2 != 0:
-            encoded_combined = tf.layers.max_pooling2d(encoded_combined, pool_size=pool_size,
+            encoded_combined = tf.compat.v1.layers.max_pooling2d(encoded_combined, pool_size=pool_size,
                                                           strides=pool_size, name='pool')
-            encoded_labeled = tf.layers.max_pooling2d(encoded_labeled, pool_size=pool_size,
+            encoded_labeled = tf.compat.v1.layers.max_pooling2d(encoded_labeled, pool_size=pool_size,
                                                           strides=pool_size, name='pool')
         layers_shape.append(encoded_combined.get_shape().as_list())
 
@@ -76,18 +76,18 @@ def decoder_network(latent_combined, input_size, kernel_size, padding, activatio
         for i in range(len(num_filter_)):
             decoded_combined = tf.keras.layers.UpSampling2D(name='UpSample', size=pool_size)(decoded_combined)
             scope_name = 'decoder_set_' + str(2*i)
-            with tf.variable_scope(scope_name, initializer=initializer):
-                decoded_combined = tf.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
+            with tf.compat.v1.variable_scope(scope_name, initializer=initializer):
+                decoded_combined = tf.compat.v1.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
                                                               filters=num_filter_[i], name='deconv_1',
                                                               kernel_size=kernel_size,
                                                               strides=strides, padding=padding)
             scope_name = 'decoder_set_' + str(2*i + 1)
-            with tf.variable_scope(scope_name, initializer=initializer):
+            with tf.compat.v1.variable_scope(scope_name, initializer=initializer):
                 filter_size, activation = (input_size[-1], tf.nn.sigmoid) if i == len(num_filter_) - 1 else (int(num_filter_[i] / 2), tf.nn.relu)
                 if i == len(num_filter_) - 1: # change it len(num_filter_)-1 if spatial size is not dividable by 2
                     kernel_size = (1, input_size[1] - (decoded_combined.get_shape().as_list()[2] - 1) * strides)
                     padding = 'valid'
-                decoded_combined = tf.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
+                decoded_combined = tf.compat.v1.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
                                                               filters=filter_size, name='deconv_1',
                                                               kernel_size=kernel_size,
                                                               strides=strides, padding=padding)
@@ -95,18 +95,18 @@ def decoder_network(latent_combined, input_size, kernel_size, padding, activatio
         num_filter_ = sorted(set(num_filter_), reverse=True)
         for i in range(len(num_filter_)):
             scope_name = 'decoder_set_' + str(2 * i)
-            with tf.variable_scope(scope_name, initializer=initializer):
-                decoded_combined = tf.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
+            with tf.compat.v1.variable_scope(scope_name, initializer=initializer):
+                decoded_combined = tf.compat.v1.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
                                                               filters=num_filter_[i], name='deconv_1',
                                                               kernel_size=kernel_size,
                                                               strides=strides, padding=padding)
             scope_name = 'decoder_set_' + str(2 * i + 1)
-            with tf.variable_scope(scope_name, initializer=initializer):
+            with tf.compat.v1.variable_scope(scope_name, initializer=initializer):
                 filter_size, activation = (input_size[-1], tf.nn.sigmoid) if i == len(num_filter_) - 1 else (int(num_filter_[i] / 2), tf.nn.relu)
                 if i == len(num_filter_):  # change it len(num_filter_)-1 if spatial size is not dividable by 2
                     kernel_size = (1, input_size[1] - (decoded_combined.get_shape().as_list()[2] - 1) * strides)
                     padding = 'valid'
-                decoded_combined = tf.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
+                decoded_combined = tf.compat.v1.layers.conv2d_transpose(inputs=decoded_combined, activation=activation,
                                                               filters=filter_size, name='deconv_1',
                                                               kernel_size=kernel_size,
                                                               strides=strides, padding=padding)
@@ -119,25 +119,25 @@ def decoder_network(latent_combined, input_size, kernel_size, padding, activatio
 def classifier_mlp(num_class, num_fliter_cls, num_dense, input_latent, num_filter):
     conv_layer = input_latent
     for i in range(len(num_fliter_cls)):
-        conv_layer = tf.layers.conv2d(inputs=conv_layer, activation=tf.nn.relu, filters=num_filter_cls[i],
+        conv_layer = tf.compat.v1.layers.conv2d(inputs=conv_layer, activation=tf.nn.relu, filters=num_filter_cls[i],
                                   kernel_size=kernel_size, strides=strides, padding=padding,
                                   kernel_initializer=initializer)
         if len(num_filter) % 2 == 0:
             if i % 2 != 0:
-                conv_layer = tf.layers.max_pooling2d(conv_layer, pool_size=pool_size,strides=pool_size, name='pool')
+                conv_layer = tf.compat.v1.layers.max_pooling2d(conv_layer, pool_size=pool_size,strides=pool_size, name='pool')
         else:
             if i % 2 == 0:
-                conv_layer = tf.layers.max_pooling2d(conv_layer, pool_size=pool_size,strides=pool_size, name='pool')
+                conv_layer = tf.compat.v1.layers.max_pooling2d(conv_layer, pool_size=pool_size,strides=pool_size, name='pool')
 
-    dense = tf.layers.flatten(conv_layer)
+    dense = tf.compat.v1.layers.flatten(conv_layer)
     scope_name = 'cls_set_'
     units = int(dense.get_shape().as_list()[-1] / 4)
     for i in range(num_dense):
-        dense = tf.layers.dense(dense, units, activation=tf.nn.relu)
+        dense = tf.compat.v1.layers.dense(dense, units, activation=tf.nn.relu)
         units /= 2
     dense_last = dense
-    dense = tf.layers.dropout(dense, 0.5)
-    classifier_output = tf.layers.dense(dense, num_class, name='FC_4')
+    dense = tf.compat.v1.layers.dropout(dense, 0.5)
+    classifier_output = tf.compat.v1.layers.dense(dense, num_class, name='FC_4')
     return classifier_output, dense_last
 
 
@@ -146,18 +146,18 @@ def semi_supervised(input_latent, input_labeled, input_combined, true_label, alp
     decoded_output = decoder_network(latent_combined=latent_combined, input_size=input_size, kernel_size=kernel_size, padding=padding, activation=activation, num_filter=num_filter)
     classifier_output, dense = classifier_mlp(num_class=num_class, num_fliter_cls=num_filter_cls, num_dense=num_dense, input_latent=input_latent, num_filter=num_filter)
 
-    loss_ae = tf.reduce_mean(tf.square(input_combined - decoded_output), name='loss_ae') * 100
-    loss_cls = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=true_label, logits=classifier_output),
+    loss_ae = tf.reduce_mean(input_tensor=tf.square(input_combined - decoded_output), name='loss_ae') * 100
+    loss_cls = tf.reduce_mean(input_tensor=tf.nn.softmax_cross_entropy_with_logits(labels=true_label, logits=classifier_output),
                               name='loss_cls')
     total_loss = alpha*loss_ae + beta*loss_cls
-    loss_reg = tf.reduce_sum(tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES, 'EasyNet'))
-    train_op_ae = tf.train.AdamOptimizer().minimize(loss_ae)
-    train_op_cls = tf.train.AdamOptimizer().minimize(loss_cls)
-    train_op = tf.train.AdamOptimizer().minimize(total_loss)
+    loss_reg = tf.reduce_sum(input_tensor=tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES, 'EasyNet'))
+    train_op_ae = tf.compat.v1.train.AdamOptimizer().minimize(loss_ae)
+    train_op_cls = tf.compat.v1.train.AdamOptimizer().minimize(loss_cls)
+    train_op = tf.compat.v1.train.AdamOptimizer().minimize(total_loss)
     # train_op = train_op = tf.layers.optimize_loss(total_loss, optimizer='Adam')
 
-    correct_prediction = tf.equal(tf.argmax(true_label, 1), tf.argmax(classifier_output, 1))
-    accuracy_cls = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    correct_prediction = tf.equal(tf.argmax(input=true_label, axis=1), tf.argmax(input=classifier_output, axis=1))
+    accuracy_cls = tf.reduce_mean(input_tensor=tf.cast(correct_prediction, tf.float32))
     return loss_ae, loss_cls, accuracy_cls, train_op_ae, train_op_cls, classifier_output, dense, train_op, total_loss
 
 
@@ -264,26 +264,26 @@ def training(one_fold, X_unlabeled, seed, prop, num_filter, epochs_ae=10, epochs
     np.random.shuffle(Train_X_Comb)
     input_size = list(np.shape(Test_X)[1:])
 
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        input_labeled = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_labeled')
-        input_combined = tf.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_combined')
-        true_label = tf.placeholder(tf.float32, shape=[None, num_class], name='true_label')
-        alpha = tf.placeholder(tf.float32, shape=(), name='alpha')
-        beta = tf.placeholder(tf.float32, shape=(), name='beta')
+    tf.compat.v1.reset_default_graph()
+    with tf.compat.v1.Session() as sess:
+        input_labeled = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_labeled')
+        input_combined = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None] + input_size, name='input_combined')
+        true_label = tf.compat.v1.placeholder(tf.float32, shape=[None, num_class], name='true_label')
+        alpha = tf.compat.v1.placeholder(tf.float32, shape=(), name='alpha')
+        beta = tf.compat.v1.placeholder(tf.float32, shape=(), name='beta')
         latent_combined, latent_labeled, layers_shape, latent_size = encoder_network(latent_dim=latent_dim,
                                                                                      num_filter=num_filter,
                                                                                      input_combined=input_combined,
                                                                                      input_labeled=input_labeled)
-        input_latent = tf.placeholder(dtype=tf.float32, shape=latent_size, name='input_labeled')
+        input_latent = tf.compat.v1.placeholder(dtype=tf.float32, shape=latent_size, name='input_labeled')
         loss_ae, loss_cls, accuracy_cls, train_op_ae, train_op_cls, classifier_output, dense, train_op, total_loss = semi_supervised(
             input_latent=input_latent, input_labeled=input_labeled, input_combined=input_combined,
             true_label=true_label, alpha=alpha, beta=beta,
             num_class=num_class,
             latent_dim=latent_dim, num_filter=num_filter, latent_combined=latent_combined, input_size=input_size)
 
-        sess.run(tf.global_variables_initializer())
-        saver = tf.train.Saver(max_to_keep=20)
+        sess.run(tf.compat.v1.global_variables_initializer())
+        saver = tf.compat.v1.train.Saver(max_to_keep=20)
         for k in range(epochs_ae):
             num_batches = len(Train_X_Comb) // batch_size
             x_combined_index = get_combined_index(train_x_comb=Train_X_Comb)

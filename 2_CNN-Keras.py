@@ -14,8 +14,8 @@ from sklearn.metrics import accuracy_score, confusion_matrix, classification_rep
 x = np.ones((1, 2, 3))
 a = np.transpose(x, (1, 0, 2))
 
-tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
-sess = print(tf.Session(config=tf.ConfigProto(log_device_placement=True)))
+tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(allow_soft_placement=True, log_device_placement=True))
+sess = print(tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(log_device_placement=True)))
 
 start_time = time.clock()
 np.random.seed(7)
@@ -28,7 +28,7 @@ with open(filename, 'rb') as f:
 prop = 1
 random.seed(7)
 np.random.seed(7)
-tf.set_random_seed(7)
+tf.compat.v1.set_random_seed(7)
 Train_X_Comb = Train_X
 index = np.arange(len(Train_X))
 np.random.shuffle(index)
