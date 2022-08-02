@@ -118,10 +118,10 @@ def compute_jerk(acc1, acc2, delta_time):
 
 
 def compute_bearing(p1, p2):
-    y = math.sin(math.radians(p2[1]) - math.radians(p1[1])) * math.radians(math.cos(p2[0]))
-    x = math.radians(math.cos(p1[0])) * math.radians(math.sin(p2[0])) - \
-        math.radians(math.sin(p1[0])) * math.radians(math.cos(p2[0])) \
-        * math.radians(math.cos(p2[1]) - math.radians(p1[1]))
+    y = math.sin(math.radians(p2[1]) - math.radians(p1[1])) * math.cos(math.radians(p2[0]))
+    x = math.cos(math.radians(p1[0])) * math.sin(math.radians(p2[0])) - \
+        math.sin(math.radians(p1[0])) * math.cos(math.radians(p2[0])) \
+        * math.cos(math.radians(p2[1]) - math.radians(p1[1]))
     # Convert radian from -pi to pi to [0, 360] degree
     return (math.atan2(y, x) * 180. / math.pi + 360) % 360
 
